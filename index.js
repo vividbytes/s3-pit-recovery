@@ -16,6 +16,7 @@ async function getObjectsToRecover(timestamp) {
     let isMore = true;
     let nextKey; 
     const objects = {};
+    const deleteMarkers = {};
 
     while(isMore) {
 	let data = await S3.listObjectVersions({
@@ -25,18 +26,30 @@ async function getObjectsToRecover(timestamp) {
 	    MaxKeys: 6
 	}).promise();
 
-	//TODO: figure out how to use delete-markers
+	data.DeleteMarkers.forEach(obj => {
+	    const currObj = deleteMarkers[obj.Key];
+	    const lastModified = new Date(obj.LastModified);
+
+	    if (!currObj && obj.LastModified <= timestamp) {
+		deleteMarkers[obj.Key] = obj;
+	    } else if (currObj &&
+		       lastModified <= timestamp &&
+		       lastModified > new Date(currObj.LastModified)
+		      ) {
+		deleteMarkers[obj.Key] = obj;
+	    }
+	});
 
 	data.Versions.forEach(obj => {
-	    const currObj = objects[obj.key];
+	    const currObj = objects[obj.Key];
 	    const lastModified = new Date(obj.LastModified);
 
 	    if (!currObj && obj.LastModified <= timestamp) {
 		objects[obj.Key] = obj;
-	    } else if (currObj) {
-		if (lastModified <= timestamp &&
-		    lastModified > new Date(currObj.LastModified)) {
-		}
+	    } else if (currObj &&
+		       lastModified <= timestamp &&
+		       lastModified > new Date(currObj.LastModified)
+		      ) {
 		objects[obj.Key] = obj;
 	    }
 	});
@@ -44,6 +57,19 @@ async function getObjectsToRecover(timestamp) {
 	isMore = data.IsTruncated;
 	nextKey = data.NextKeyMarker;
     }
+
+    Object.keys(deleteMarkers).forEach(key => {
+	const deleteMarker = deleteMarkers[key];
+	const object = objects[key];
+
+	if (!object) {
+	    return;
+	}
+
+	if (new Date(object.LastModified) < new Date(deleteMarker.LastModified)) {
+	    delete objects[key];
+	}
+    });
 
     return objects;
 }
@@ -71,7 +97,8 @@ async function retrieveObject(obj, dir) {
 
 async function s3PitRecovery(dir = 'test') {
     await mkdirAsync(dir);
-    const objects =  await getObjectsToRecover(new Date('2018-05-02'));
+    const objects =  await getObjectsToRecover(new Date('2018-04-30'));
+
     return Promise.map(Object.keys(objects).map(key => objects[key]), obj => {
     	if (obj.StorageClass === 'GLACIER') {
 	    return requestObjectRecovery(obj);
