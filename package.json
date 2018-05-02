@@ -1,0 +1,21 @@
+{
+  "name": "s3-pit-recovery",
+  "version": "0.0.1",
+  "description": "Point in time recovery of versioned s3 objects",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "s3",
+    "aws",
+    "backup",
+    "recovery"
+  ],
+  "author": "vividbytes",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.230.1",
+    "bluebird": "^3.5.1"
+  }
+}
