@@ -7,12 +7,6 @@ const {promisify} = require('util');
 
 const mkdirAsync = promisify(fs.mkdir);
 
-s3PitRecovery({
-    bucket: 'notes.vividbytes.io',
-    destination: 'test'
-})
-    .catch(e => console.error(e.message));
-
 async function getObjectsToRecover(options) {
     let isMore = true;
     let nextKey; 
@@ -132,38 +126,48 @@ async function s3PitRecovery(options = {}) {
     	} else {
     	    return retrieveObject(obj, config);
     	}
-    }, { concurrency: 1 });
+    }, { concurrency: 10 });
 }
+
+class ValidationError extends Error {}
 
 function validateConfig(config) {
 
     if (!config.destination) {
-	throw new TypeError('parameter --destination is required');
+	throw new ValidationError('parameter --destination is required');
     }
 
     if (!config.bucket) {
-	throw new TypeError('parameter --bucket is required');
+	throw new ValidationError('parameter --bucket is required');
     }
 
     if (
 	config.clacierTier &&
 	!['Standard', 'Expedited', 'Bulk'].includes(config.glacierTier)) {
-	throw new TypeError('parameter --glacierTier must be one of Standard, Expedited, Bulk');
+	throw new ValidationError('parameter --glacierTier must be one of Standard, Expedited, Bulk');
     }
 
     if (
 	    config.glacierDays &&
-	    /^0+$/.test(config.glacierDays) &&
-	    !/^[0-9]+$/.test(config.glacierDays)
+	    (
+		!/^[0-9]+$/.test(config.glacierDays) ||
+		/^0+$/.test(config.glacierDays)
+	    )
        ) {
-	throw new TypeError('parameter --glacierDays must be a positive integer');
+	throw new ValidationError('parameter --glacierDays must be a positive integer');
     }
 
     if (
 	config.time &&
 	new Date(config.time).toString() === 'Invalid Date'
     ) {
-	throw new TypeError('parameter --time must be a valid JSON string');
+	throw new ValidationError('parameter --time must be a valid JSON string');
     }
 
 }
+
+
+module.exports = {
+    recoverBucket: s3PitRecovery,
+    ValidationError: ValidationError
+};

@@ -16,6 +16,8 @@
   "license": "ISC",
   "dependencies": {
     "aws-sdk": "^2.230.1",
-    "bluebird": "^3.5.1"
+    "bluebird": "^3.5.1",
+    "colors": "^1.2.3",
+    "commander": "^2.15.1"
   }
 }
