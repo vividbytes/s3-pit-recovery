@@ -3,6 +3,7 @@
 const program = require('commander');
 const { recoverBucket, ValidationError } = require('../index.js');
 const colors = require('colors');
+const { version } = require('../package.json');
 
 colors.setTheme({
   error: 'red'
@@ -10,13 +11,13 @@ colors.setTheme({
  
 
 program
-  .version('0.0.1')
-  .option('-b, --bucket [string]', 'S3 bucket to restore')
-  .option('-p, --prefix [string]', 'Object prefix')
-  .option('-d, --destination [string]', 'Destination folder')
-  .option('-t, --time [json date-string]', 'Time to restore to')
-  .option('-T, --glacierTier [Standard|Expedited|Bulk]', 'Glacier tier')
-  .option('-D, --glacierDays [integer]', 'Glacier days')
+  .version(version)
+  .option('-b, --bucket <value>', '(Required) S3 bucket to restore')
+  .option('-d, --destination <value>', '(Required) Destination folder')
+  .option('-p, --prefix <value>', 'Filter by S3 object prefix')
+  .option('-t, --time <value>', 'Time to restore to. Defaults to current time.')
+  .option('-T, --glacierTier <value>', 'Glacier tier. Must be one of "Standard", "Expedited", "Bulk"')
+  .option('-D, --glacierDays <value>', 'Glacier days. Must be a positive integer')
   .parse(process.argv);
 
 recoverBucket(program)
