@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 const program = require('commander');
-const { recoverBucket, ValidationError } = require('../index.js');
 const colors = require('colors');
+const inquirer = require('inquirer');
 const { version } = require('../package.json');
+const { getObjects, restoreObjects, ValidationError } = require('../index.js');
 
 colors.setTheme({
     error: 'red'
@@ -22,7 +23,58 @@ program
     .option('-D, --glacierDays <value>', 'Glacier days. Must be a positive integer')
     .parse(process.argv);
 
-recoverBucket(program).catch(e => {
+async function inquireRecovery({ s3Objects, glacierObjects }) {
+    return inquirer.prompt([
+        {
+            when: s3Objects.length > 0,
+            type: 'list',
+            name: 's3Recovery',
+            message: `Found ${s3Objects.length} objects in s3. Do you want to continue?`,
+            choices: ['Yes', 'No']
+        },
+        {
+            when: s3Objects.length > 0,
+            type: 'list',
+            name: 'glacierRecovery',
+            message: `Found ${
+                glacierObjects.length
+            } objects in glacier. Do you want to restore them?`,
+            choices: ['Yes', 'No']
+        }
+    ]);
+}
+
+async function inquireS3(s3Objects, glacierObjects) {
+    return inquirer.prompt([]);
+}
+
+async function run(options) {
+    let objects, recoveryMethod;
+
+    try {
+        objects = await getObjects(options);
+    } catch (e) {
+        handleErrors(e);
+    }
+
+    const { s3Recovery, glacierRecovery } = await inquireRecovery(objects);
+
+    try {
+        await restoreObjects(
+            objects,
+            Object.assign(options, {
+                recoverS3: s3Recovery === 'Yes',
+                recoverGlacier: glacierRecovery === 'Yes'
+            })
+        );
+
+        process.exit(0);
+    } catch (e) {
+        handleErrors(e);
+    }
+}
+
+function handleErrors(e) {
     if (e instanceof ValidationError) {
         console.error(colors.red(e.message));
         process.exit(1);
@@ -30,4 +82,6 @@ recoverBucket(program).catch(e => {
         console.error(colors.red(e));
         process.exit(2);
     }
-});
+}
+
+run(program);
