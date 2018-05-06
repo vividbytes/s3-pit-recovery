@@ -11,7 +11,8 @@ const defaultOptions = {
     time: new Date(),
     prefix: '',
     glacierTier: 'Standard',
-    glacierDays: 3
+    glacierDays: 7,
+    concurrency: 50
 };
 
 async function getObjects(options) {
@@ -29,7 +30,7 @@ async function getObjects(options) {
             Bucket: config.bucket,
             Prefix: config.prefix,
             KeyMarker: nextKey,
-            MaxKeys: 6
+            MaxKeys: 1000
         }).promise();
 
         data.DeleteMarkers.forEach(obj => {
@@ -79,19 +80,43 @@ async function getObjects(options) {
         }
     });
 
-    return Object.keys(objects).reduce(
-        (acc, key) => {
+    return Promise.map(
+        Object.keys(objects),
+        key => {
             const obj = objects[key];
 
             if (obj.StorageClass === 'GLACIER') {
-                acc.glacierObjects.push(obj);
+                return S3.headObject({
+                    Bucket: config.bucket,
+                    Key: obj.Key,
+                    VersionId: obj.VersionId
+                })
+                    .promise()
+                    .then(data => {
+                        if (data.Restore) {
+                            return obj;
+                        } else {
+                            obj.glacier = true;
+                            return obj;
+                        }
+                    });
             } else {
-                acc.s3Objects.push(obj);
+                return obj;
             }
-
-            return acc;
         },
-        { s3Objects: [], glacierObjects: [] }
+        { concurrency: config.concurrency }
+    ).then(objects =>
+        objects.reduce(
+            (acc, obj) => {
+                if (obj.glacier) {
+                    acc.glacierObjects.push(obj);
+                } else {
+                    acc.s3Objects.push(obj);
+                }
+                return acc;
+            },
+            { s3Objects: [], glacierObjects: [] }
+        )
     );
 }
 
@@ -103,47 +128,58 @@ async function recoverGlacierObject(obj, options) {
         Key: obj.Key,
         VersionId: obj.VersionId,
         RestoreRequest: {
-            Days: options.glacierDays,
             GlacierJobParameters: {
                 Tier: options.glacierTier
-            }
+            },
+            Days: options.glacierDays
         }
-    }).promise();
-}
-
-async function recoverS3Object(obj, options) {
-    console.log('retrieving object from S3', obj.Key);
-
-    return new Promise((resolve, reject) => {
-        const pipe = S3.getObject({
-            Bucket: options.bucket,
-            Key: obj.Key,
-            VersionId: obj.VersionId
-        })
-            .createReadStream()
-            .pipe(fs.createWriteStream(path.resolve(options.destination, obj.Key)))
-            .on('finish', resolve)
-            .on('error', reject);
     });
 }
 
-async function restoreObjects({ s3Objects, glacierObjects }, options = {}) {
-    const concurrency = 50;
+async function recoverS3Object(obj, options) {
+    console.log('restoring object from S3', obj.Key);
 
+    const copySource = `/${options.bucket}/${obj.Key}?versionId=${obj.VersionId}`;
+
+    return S3.copyObject({
+        Bucket: options.destinationBucket,
+        Key: obj.Key,
+        CopySource: copySource
+    }).promise();
+}
+
+async function restoreObjects({ s3Objects, glacierObjects }, options = {}) {
     validateConfig(options);
     const config = Object.assign({}, defaultOptions, options);
 
-    await mkdirAsync(options.destination);
+    const concurrency = config.concurrency;
 
-    if (options.recoverS3) {
-        await Promise.map(s3Objects, obj => recoverS3Object(obj, config), {
-            concurrency: 50
-        });
-    }
+    console.log('creating bucket: ', config.destinationBucket);
+
+    await S3.createBucket(
+        Object.assign(
+            {
+                Bucket: config.destinationBucket
+            },
+            config.destinationBucketRegion
+                ? {
+                      CreateBucketConfiguration: {
+                          LocationConstraint: config.destinationBucketRegion
+                      }
+                  }
+                : {}
+        )
+    ).promise();
 
     if (options.recoverGlacier) {
         await Promise.map(glacierObjects, obj => recoverGlacierObject(obj, config), {
-            concurrency: 50
+            concurrency
+        });
+    }
+
+    if (options.recoverS3) {
+        await Promise.map(s3Objects, obj => recoverS3Object(obj, config), {
+            concurrency
         });
     }
 
@@ -153,8 +189,8 @@ async function restoreObjects({ s3Objects, glacierObjects }, options = {}) {
 class ValidationError extends Error {}
 
 function validateConfig(config) {
-    if (!config.destination) {
-        throw new ValidationError('parameter --destination is required');
+    if (!config.destinationBucket) {
+        throw new ValidationError('parameter --destinationBucket is required');
     }
 
     if (!config.bucket) {

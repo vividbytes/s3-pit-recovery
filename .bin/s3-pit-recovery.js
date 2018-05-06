@@ -13,32 +13,39 @@ colors.setTheme({
 program
     .version(version)
     .option('-b, --bucket <value>', '(Required) S3 bucket to restore')
-    .option('-d, --destination <value>', '(Required) Destination folder')
+    .option('-d, --destinationBucket <value>', '(Required) Destination bucket')
+    .option(
+        '-r, --destinationBucketRegion <value>',
+        'Destination bucket region. Default: us-east-1'
+    )
     .option('-p, --prefix <value>', 'Filter by S3 object prefix')
-    .option('-t, --time <value>', 'Time to restore to. Defaults to current time.')
+    .option('-t, --time <value>', 'Time to restore to. Default: current time.')
     .option(
         '-T, --glacierTier <value>',
         'Glacier tier. Must be one of "Standard", "Expedited", "Bulk"'
     )
-    .option('-D, --glacierDays <value>', 'Glacier days. Must be a positive integer')
+    .option(
+        '-D, --glacierDays <value>',
+        'Lifetime of the active copy in days. Must be a positive integer. Default: 7'
+    )
     .parse(process.argv);
 
 async function inquireRecovery({ s3Objects, glacierObjects }) {
     return inquirer.prompt([
         {
-            when: s3Objects.length > 0,
+            when: glacierObjects.length > 0,
             type: 'list',
-            name: 's3Recovery',
-            message: `Found ${s3Objects.length} objects in s3. Do you want to continue?`,
+            name: 'glacierRecovery',
+            message: `Found ${
+                glacierObjects.length
+            } objects in glacier. Objects stored in Glacier cannot be recovered until they've been restored. Do you want to send restore requests for these objects?`,
             choices: ['Yes', 'No']
         },
         {
             when: s3Objects.length > 0,
             type: 'list',
-            name: 'glacierRecovery',
-            message: `Found ${
-                glacierObjects.length
-            } objects in glacier. Do you want to restore them?`,
+            name: 's3Recovery',
+            message: `Found ${s3Objects.length} objects in s3. Do you want to restore them?`,
             choices: ['Yes', 'No']
         }
     ]);
@@ -59,19 +66,21 @@ async function run(options) {
 
     const { s3Recovery, glacierRecovery } = await inquireRecovery(objects);
 
-    try {
-        await restoreObjects(
-            objects,
-            Object.assign(options, {
-                recoverS3: s3Recovery === 'Yes',
-                recoverGlacier: glacierRecovery === 'Yes'
-            })
-        );
-
-        process.exit(0);
-    } catch (e) {
-        handleErrors(e);
+    if (s3Recovery === 'Yes' || glacierRecovery === 'Yes') {
+        try {
+            await restoreObjects(
+                objects,
+                Object.assign(options, {
+                    recoverS3: s3Recovery === 'Yes',
+                    recoverGlacier: glacierRecovery === 'Yes'
+                })
+            );
+        } catch (e) {
+            handleErrors(e);
+        }
     }
+
+    process.exit(0);
 }
 
 function handleErrors(e) {
