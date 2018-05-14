@@ -86,20 +86,25 @@ async function getObjects(options) {
             const obj = objects[key];
 
             if (obj.StorageClass === 'GLACIER') {
-                return S3.headObject({
-                    Bucket: config.bucket,
-                    Key: obj.Key,
-                    VersionId: obj.VersionId
-                })
-                    .promise()
-                    .then(data => {
-                        if (data.Restore) {
-                            return obj;
-                        } else {
-                            obj.glacier = true;
-                            return obj;
-                        }
-                    });
+                if (config.ignoreGlacier) {
+                    obj.glacier = true;
+                    return obj;
+                } else {
+                    return S3.headObject({
+                        Bucket: config.bucket,
+                        Key: obj.Key,
+                        VersionId: obj.VersionId
+                    })
+                        .promise()
+                        .then(data => {
+                            if (data.Restore) {
+                                return obj;
+                            } else {
+                                obj.glacier = true;
+                                return obj;
+                            }
+                        });
+                }
             } else {
                 return obj;
             }
@@ -171,7 +176,7 @@ async function restoreObjects({ s3Objects, glacierObjects }, options = {}) {
         )
     ).promise();
 
-    if (options.recoverGlacier) {
+    if (options.recoverGlacier && !options.ignoreGlacier) {
         await Promise.map(glacierObjects, obj => recoverGlacierObject(obj, config), {
             concurrency
         });

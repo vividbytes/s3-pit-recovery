@@ -24,16 +24,17 @@ program
         '-T, --glacierTier <value>',
         'Glacier tier. Must be one of "Standard", "Expedited", "Bulk"'
     )
+    .option('-i, --ignoreGlacier', 'Ignore objects whose storage class is Glacier')
     .option(
         '-D, --glacierDays <value>',
         'Lifetime of the active copy in days. Must be a positive integer. Default: 7'
     )
     .parse(process.argv);
 
-async function inquireRecovery({ s3Objects, glacierObjects }) {
+async function inquireRecovery({ s3Objects, glacierObjects }, { ignoreGlacier }) {
     return inquirer.prompt([
         {
-            when: glacierObjects.length > 0,
+            when: glacierObjects.length > 0 && !ignoreGlacier,
             type: 'list',
             name: 'glacierRecovery',
             message: `Found ${
@@ -51,10 +52,6 @@ async function inquireRecovery({ s3Objects, glacierObjects }) {
     ]);
 }
 
-async function inquireS3(s3Objects, glacierObjects) {
-    return inquirer.prompt([]);
-}
-
 async function run(options) {
     let objects, recoveryMethod;
 
@@ -64,7 +61,7 @@ async function run(options) {
         handleErrors(e);
     }
 
-    const { s3Recovery, glacierRecovery } = await inquireRecovery(objects);
+    const { s3Recovery, glacierRecovery } = await inquireRecovery(objects, options);
 
     if (s3Recovery === 'Yes' || glacierRecovery === 'Yes') {
         try {
