@@ -1,6 +1,6 @@
 {
   "name": "s3-pit-recovery",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Point in time recovery of versioned s3 objects",
   "repository": "github:vividbytes/s3-pit-recovery",
   "main": "index.js",
