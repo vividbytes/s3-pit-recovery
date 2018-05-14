@@ -4,7 +4,13 @@ This package implements point in time recovery of versioned S3 objects. The prog
 
 If some of the objects are stored in Glacier the program gives you the option to restore those files.
 
-**Important**
+## Installation
+
+```
+npm -g install s3-pit-recovery
+```
+
+## Important
 
 S3 doesn't offer batch operations for copying objects. Each object is copied individually using using the copy-object API.
 
@@ -16,6 +22,9 @@ In summary, the API calls made by this package are
   - head-object for all objects whose storage class is Glacier unless `--ignoreGlacier` flag is used.
   
 If you want to recover a large number of objects, please see [S3 pricing](https://aws.amazon.com/s3/pricing/) before using this package to avoid nasty surprises in your aws bill.
+
+
+## Usage
 
 ```
 Usage: s3-pit-recovery [options]
