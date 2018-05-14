@@ -1,3 +1,5 @@
+# S3-pit-recovery
+
 This package implements point in time recovery of versioned S3 objects. The program takes a source bucket, optional prefix, and a time value. It finds objects from the source bucket at the given time and copies them to a new non-versioned bucket.
 
 If some of the objects are stored in Glacier the program gives you the option to restore those files.
